@@ -16,6 +16,7 @@ import os
 import ssl
 import tempfile
 import time
+import traceback
 import uuid
 from urllib.parse import urlparse
 
@@ -86,6 +87,7 @@ def lambda_handler(event, context):
         results = run_checks(*load_config_and_cert(function_name))
         success = results["valid_request"] and results["invalid_payload"] and results["no_client_cert"]
     except Exception as err:
+        print(traceback.format_exc())  # full stack in the probe's log for whoever is on call
         results, success = {"error": f"{type(err).__name__}: {err}"}, False
 
     latency_ms = round((time.monotonic() - started) * 1000, 1)

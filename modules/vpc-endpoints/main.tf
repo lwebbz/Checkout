@@ -14,7 +14,7 @@ resource "aws_vpc_security_group_ingress_rule" "from_sources" {
   for_each = var.allowed_source_security_group_ids
 
   security_group_id            = aws_security_group.endpoints.id
-  description                  = "HTTPS from workload SG"
+  description                  = "HTTPS from ${each.key}"
   ip_protocol                  = "tcp"
   from_port                    = 443
   to_port                      = 443
