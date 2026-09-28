@@ -50,3 +50,9 @@ variable "resolver_query_logs_enabled" {
   type        = bool
   default     = true
 }
+
+variable "permissions_boundary_arn" {
+  description = "Permissions boundary for the flow-logs role (required when the deploying role may only create bounded roles)."
+  type        = string
+  default     = null
+}
