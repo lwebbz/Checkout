@@ -123,8 +123,8 @@ module "ci_plan" {
   github_oidc = {
     provider_arn = data.terraform_remote_state.bootstrap.outputs.github_oidc_provider_arn
     subjects = [
-      "repo:${var.github_repo}:pull_request",
-      "repo:${var.github_repo}:ref:refs/heads/main",
+      "${var.github_oidc_subject_prefix}:pull_request",
+      "${var.github_oidc_subject_prefix}:ref:refs/heads/main",
     ]
   }
   managed_policy_arns = ["arn:aws:iam::aws:policy/ReadOnlyAccess"]
@@ -245,7 +245,7 @@ module "ci_apply" {
   description = "GitHub Actions terraform apply (GitHub Environment ${var.env} only)"
   github_oidc = {
     provider_arn = data.terraform_remote_state.bootstrap.outputs.github_oidc_provider_arn
-    subjects     = ["repo:${var.github_repo}:environment:${var.env}"]
+    subjects     = ["${var.github_oidc_subject_prefix}:environment:${var.env}"]
   }
   managed_policy_arns = ["arn:aws:iam::aws:policy/PowerUserAccess"]
   inline_policies     = { iam = data.aws_iam_policy_document.ci_apply_iam.json }
