@@ -29,9 +29,9 @@ variable "services" {
 }
 
 variable "allowed_source_security_group_ids" {
-  description = "SGs allowed to reach the endpoints on 443. May be empty: consumers in another state can add aws_vpc_security_group_ingress_rule on the exported SG instead."
-  type        = set(string)
-  default     = []
+  description = "SGs allowed to reach the endpoints on 443, as label => SG id (static keys, so ids can be unknown until apply). May be empty: consumers in another state can add aws_vpc_security_group_ingress_rule on the exported SG instead."
+  type        = map(string)
+  default     = {}
 }
 
 variable "endpoint_policy_json" {

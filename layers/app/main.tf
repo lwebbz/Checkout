@@ -215,10 +215,10 @@ module "probe" {
 module "alb" {
   source = "../../modules/alb"
 
-  name                              = local.api_name
+  name                              = local.base.alb_logs.alb_name
   vpc_id                            = local.network.vpc_id
   subnet_ids                        = local.network.private_subnet_ids
-  allowed_client_security_group_ids = [aws_security_group.probe.id]
+  allowed_client_security_group_ids = { probe = aws_security_group.probe.id }
   certificate_arn                   = local.base.server_certificate_arn
   trust_store_ca_bundle             = local.base.trust_store_ca_bundle
   target_lambda = {

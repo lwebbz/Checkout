@@ -14,7 +14,7 @@ resource "aws_vpc_security_group_ingress_rule" "from_client_sgs" {
   for_each = var.allowed_client_security_group_ids
 
   security_group_id            = aws_security_group.alb.id
-  description                  = "HTTPS from client SG"
+  description                  = "HTTPS from ${each.key}"
   ip_protocol                  = "tcp"
   from_port                    = 443
   to_port                      = 443
@@ -75,6 +75,10 @@ resource "aws_lb_target_group" "lambda" {
   # health signal instead.
   health_check {
     enabled = false
+    # AWS still validates the timings on a disabled check, and the defaults
+    # for Lambda targets (30s/30s) fail "interval must be greater than timeout".
+    interval = 35
+    timeout  = 30
   }
 }
 

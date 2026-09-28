@@ -1,10 +1,10 @@
 variable "name" {
-  description = "ALB name (≤32 chars)."
+  description = "ALB name; -ts and -fn are appended for the trust store and target group."
   type        = string
 
   validation {
-    condition     = length(var.name) <= 32
-    error_message = "ALB names are limited to 32 characters."
+    condition     = length(var.name) <= 29 && !startswith(var.name, "internal-")
+    error_message = "name must be at most 29 characters (the trust store appends -ts) and can't start with \"internal-\" (reserved by AWS)."
   }
 }
 
@@ -24,9 +24,9 @@ variable "subnet_ids" {
 }
 
 variable "allowed_client_security_group_ids" {
-  description = "Client SGs allowed to reach the listener on 443."
-  type        = set(string)
-  default     = []
+  description = "Client SGs allowed to reach the listener on 443, as label => SG id. Labels are static keys, so SG ids can be unknown until apply."
+  type        = map(string)
+  default     = {}
 }
 
 variable "allowed_client_cidrs" {

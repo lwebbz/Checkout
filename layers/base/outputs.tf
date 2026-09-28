@@ -12,10 +12,11 @@ output "alarms_topic_arn" {
 }
 
 output "alb_logs" {
-  description = "Bucket and prefix the ALB writes access/connection logs to (the bucket policy only allows this prefix)."
+  description = "ALB name, and the bucket/prefix it writes access and connection logs to (the bucket policy only allows this ALB and prefix)."
   value = {
-    bucket = module.alb_logs_bucket.bucket_id
-    prefix = local.alb_logs_prefix
+    alb_name = local.alb_name
+    bucket   = module.alb_logs_bucket.bucket_id
+    prefix   = local.alb_logs_prefix
   }
 }
 

@@ -31,6 +31,11 @@ data "aws_iam_policy_document" "base" {
   }
 }
 
+# Base permissions plus the caller's, merged; statement ids keep them distinguishable.
+data "aws_iam_policy_document" "execution" {
+  source_policy_documents = compact([data.aws_iam_policy_document.base.json, var.policy_json])
+}
+
 module "role" {
   source = "../iam"
 
@@ -38,10 +43,9 @@ module "role" {
   description              = "Execution role for the ${var.name} Lambda"
   trusted_services         = ["lambda.amazonaws.com"]
   permissions_boundary_arn = var.permissions_boundary_arn
-  inline_policies = merge(
-    { base = data.aws_iam_policy_document.base.json },
-    var.policy_json == null ? {} : { function = var.policy_json },
-  )
+  # One policy under a static key: for_each keys must be known at plan time,
+  # and policy_json usually isn't (it references ARNs created in the same apply).
+  inline_policies = { execution = data.aws_iam_policy_document.execution.json }
 }
 
 data "archive_file" "package" {

@@ -3,6 +3,8 @@ locals {
   role_arn        = "arn:aws:iam::${var.account_id}:role"
   api_hostname    = "api.${var.internal_domain}"
   alb_logs_prefix = "alb"
+  # ALB names can't start with "internal-" (AWS reserves it), so env goes first.
+  alb_name = "${var.env}-${var.project}"
 
   # Terraform itself (admin or CI) must be able to read the cert secrets back:
   # the provider refreshes secret versions on every plan.
@@ -42,12 +44,9 @@ data "aws_iam_policy_document" "alb_log_delivery" {
       identifiers = ["logdelivery.elasticloadbalancing.amazonaws.com"]
     }
 
-    # The ALB lives in the app layer, so its exact ARN isn't known here.
-    condition {
-      test     = "ArnLike"
-      variable = "aws:SourceArn"
-      values   = ["arn:aws:elasticloadbalancing:${var.region}:${var.account_id}:loadbalancer/app/${local.prefix}-*"]
-    }
+    # Scoped by path (this account's AWSLogs/<account id>/ prefix), as AWS
+    # documents. No aws:SourceArn condition: connection-log delivery doesn't
+    # match one, and the ALB's validation write fails with Access Denied.
   }
 }
 
