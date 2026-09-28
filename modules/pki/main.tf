@@ -13,6 +13,11 @@ resource "tls_self_signed_cert" "ca" {
   is_ca_certificate     = true
   validity_period_hours = var.ca_validity_hours
 
+  # Key identifiers link each leaf to the CA that signed it; strict verifiers
+  # (e.g. Python 3.13+ default contexts) reject chains without them.
+  set_subject_key_id   = true
+  set_authority_key_id = true
+
   subject {
     organization = var.organization
     common_name  = var.ca_common_name
@@ -44,6 +49,7 @@ resource "tls_locally_signed_cert" "server" {
   ca_cert_pem           = tls_self_signed_cert.ca.cert_pem
   validity_period_hours = var.leaf_validity_hours
   early_renewal_hours   = var.early_renewal_hours
+  set_subject_key_id    = true # authority key id is taken from the CA's subject key id
 
   allowed_uses = ["digital_signature", "key_agreement", "server_auth"]
 }
@@ -76,6 +82,7 @@ resource "tls_locally_signed_cert" "client" {
   ca_cert_pem           = tls_self_signed_cert.ca.cert_pem
   validity_period_hours = var.leaf_validity_hours
   early_renewal_hours   = var.early_renewal_hours
+  set_subject_key_id    = true
 
   allowed_uses = ["digital_signature", "key_agreement", "client_auth"]
 }
