@@ -1,0 +1,179 @@
+# Pull request: static checks + plan every layer (read-only role).
+# Push to main: static checks + plan, then wait for approval in the "dev"
+# GitHub Environment, then apply base -> network -> app.
+#
+# The iam layer is planned but never applied here: it creates the CI roles
+# themselves, and ci-apply is denied touching them. A person applies it.
+#
+# No saved plan is uploaded as an artifact: the base plan contains the sandbox
+# tls private keys, and artifacts on a public repo are downloadable by anyone.
+# The apply job re-plans after approval instead (README, CI section).
+
+name: terraform
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terraform-${{ github.ref }}
+  cancel-in-progress: false # never cancel an apply halfway
+
+env:
+  TF_VERSION: 1.16.4
+  TF_IN_AUTOMATION: "true"
+  AWS_REGION: eu-west-2
+  ENV: dev
+
+jobs:
+  checks:
+    name: fmt, validate, tflint, checkov, pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: terraform fmt
+        run: terraform fmt -check -recursive
+
+      - name: terraform validate (every module, layer and bootstrap)
+        run: make validate
+
+      - uses: terraform-linters/setup-tflint@1cf010d3c7aef302051ccdb68c14c5dc2efa34ef # v6.3.1
+        with:
+          tflint_version: v0.64.0
+
+      # Any finding blocks the merge (errors, warnings and notices alike).
+      - name: tflint
+        env:
+          GITHUB_TOKEN: ${{ github.token }} # plugin download rate limit
+        run: |
+          tflint --init
+          tflint --recursive
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12" # matches the Lambda runtime
+
+      - name: Install checkov and pytest
+        run: pip install checkov==3.3.20 pytest==9.1.1
+
+      # Any failed check blocks the merge. Open-source Checkov has no severity
+      # data without a Prisma key, so --hard-fail-on HIGH would pass everything.
+      # Exceptions are inline #checkov:skip=<id>:<reason>, reviewed in the PR.
+      - name: checkov
+        run: checkov -d . --framework terraform github_actions --quiet --compact
+
+      - name: pytest
+        run: pytest -q
+
+  plan:
+    name: plan ${{ matrix.layer }}
+    needs: checks
+    # Needs the plan role configured; fork PRs get no OIDC token, so skip them.
+    if: >-
+      vars.AWS_PLAN_ROLE_ARN != '' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        layer: [iam, base, network, app]
+    env:
+      ALERT_EMAILS: ${{ secrets.ALERT_EMAILS }} # e.g. ["me@example.com"]; base layer only
+    defaults:
+      run:
+        working-directory: layers/${{ matrix.layer }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_PLAN_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: terraform init
+        run: terraform init -input=false -backend-config=../../envs/${ENV}/${{ matrix.layer }}.tfbackend
+
+      - name: terraform plan
+        run: |
+          # An empty TF_VAR would be an invalid set(string); only pass it when set.
+          [ -n "$ALERT_EMAILS" ] && export TF_VAR_alert_emails="$ALERT_EMAILS"
+          code=0
+          terraform plan -input=false -no-color -lock-timeout=5m -detailed-exitcode \
+            -var-file=../../envs/${ENV}/common.tfvars -var-file=../../envs/${ENV}/${{ matrix.layer }}.tfvars \
+            > plan.txt || code=$?
+          cat plan.txt
+          [ "$code" -eq 1 ] && exit 1
+          {
+            echo "### ${{ matrix.layer }}: $([ "$code" -eq 2 ] && echo "changes" || echo "no changes")"
+            echo '```'
+            tail -c 60000 plan.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  apply:
+    name: apply (base, network, app)
+    needs: plan
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.AWS_PLAN_ROLE_ARN != ''
+    runs-on: ubuntu-latest
+    # Required reviewers on this environment make the job wait for approval.
+    # ci-apply's trust policy only accepts tokens for environment:dev.
+    environment: dev
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      ALERT_EMAILS: ${{ secrets.ALERT_EMAILS }} # e.g. ["me@example.com"]; base layer only
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_APPLY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: plan and apply each layer in order
+        run: |
+          [ -n "$ALERT_EMAILS" ] && export TF_VAR_alert_emails="$ALERT_EMAILS"
+          for layer in base network app; do
+            echo "::group::$layer"
+            cd "layers/$layer"
+            terraform init -input=false -backend-config="../../envs/${ENV}/${layer}.tfbackend"
+            code=0
+            terraform plan -input=false -no-color -lock-timeout=5m -detailed-exitcode -out=tfplan \
+              -var-file="../../envs/${ENV}/common.tfvars" -var-file="../../envs/${ENV}/${layer}.tfvars" || code=$?
+            [ "$code" -eq 1 ] && exit 1
+            if [ "$code" -eq 2 ]; then
+              terraform apply -input=false -no-color tfplan
+              echo "- $layer: applied" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "- $layer: no changes" >> "$GITHUB_STEP_SUMMARY"
+            fi
+            rm -f tfplan
+            cd - >/dev/null
+            echo "::endgroup::"
+          done
