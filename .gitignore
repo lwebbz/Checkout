@@ -1,0 +1,32 @@
+# Terraform working dirs, state and plans. State can hold private keys: never commit it.
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Env tfvars hold no secrets and are committed (overrides a global *.tfvars ignore).
+# Local-only variables (alert email and anything personal) stay ignored.
+!*.tfvars
+*.local.tfvars
+local.auto.tfvars
+
+# Key material
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Build artefacts
+build/
+*.zip
