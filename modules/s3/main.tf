@@ -111,8 +111,16 @@ data "aws_iam_policy_document" "this" {
       identifiers = ["*"]
     }
 
+    # Only when the header is sent: uploads without it get default encryption.
+    # (StringNotEqualsIfExists would be true for a *missing* header and deny them.)
     condition {
-      test     = "StringNotEqualsIfExists"
+      test     = "Null"
+      variable = "s3:x-amz-server-side-encryption"
+      values   = ["false"]
+    }
+
+    condition {
+      test     = "StringNotEquals"
       variable = "s3:x-amz-server-side-encryption"
       values   = [var.sse_algorithm]
     }
@@ -132,8 +140,16 @@ data "aws_iam_policy_document" "this" {
         identifiers = ["*"]
       }
 
+      # Only when the header is sent: uploads without it get default encryption.
+      # (StringNotEqualsIfExists would be true for a *missing* header and deny them.)
       condition {
-        test     = "StringNotEqualsIfExists"
+        test     = "Null"
+        variable = "s3:x-amz-server-side-encryption-aws-kms-key-id"
+        values   = ["false"]
+      }
+
+      condition {
+        test     = "StringNotEquals"
         variable = "s3:x-amz-server-side-encryption-aws-kms-key-id"
         values   = [var.kms_key_arn]
       }
