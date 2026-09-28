@@ -1,0 +1,6 @@
+bucket       = "328996808954-tfstate-eu-west-2"
+key          = "internal-api/dev/app/terraform.tfstate"
+region       = "eu-west-2"
+encrypt      = true
+kms_key_id   = "arn:aws:kms:eu-west-2:328996808954:key/6e610c9d-c475-43b3-9caf-6411a0a92039"
+use_lockfile = true
